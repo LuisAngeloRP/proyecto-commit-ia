@@ -24,13 +24,55 @@ def has_changes(repo):
     """
     Verifica si hay cambios en el repositorio, incluyendo archivos eliminados.
     """
-    return bool(repo.git.diff('HEAD')) or bool(repo.git.ls_files(deleted=True))
+    return bool(repo.git.status('--porcelain').strip())
 
 def get_deleted_files(repo):
     """
     Obtiene la lista de archivos eliminados.
     """
     return repo.git.ls_files(deleted=True).splitlines()
+def format_commit_message(diff_text):
+    """
+    Formatea un mensaje de commit basado en el contenido del diff.
+    """
+    if "add" in diff_text.lower():
+        title = "feat: add new features"
+    elif "fix" in diff_text.lower():
+        title = "fix: resolve issues and bugs"
+    elif "remove" in diff_text.lower():
+        title = "chore: remove deprecated code"
+    elif "update" in diff_text.lower() or "refactor" in diff_text.lower():
+        title = "refactor: code improvements and updates"
+    else:
+        title = "chore: general updates"
+
+    # Limitar la longitud del cuerpo del mensaje a 250 caracteres.
+    body = diff_text[:250].replace('\n', ' ')
+    return f"{title}\n\n{body}"
+
+
+def add_all_changes(repo):
+    """
+    Añade todos los archivos modificados, nuevos y eliminados al área de staging.
+    """
+    try:
+        repo.git.add(A=True)  # Añadir todos los cambios (nuevos, modificados, eliminados)
+        repo.git.add(update=True)  # Asegurar que se añadan los archivos modificados
+    except Exception as e:
+        print(f"Error al añadir archivos al área de staging: {e}")
+
+def add_file_to_staging(repo, file):
+    """
+    Añade un archivo específico al área de staging.
+    """
+    try:
+        if file in get_deleted_files(repo):
+            repo.git.rm(file)
+        else:
+            repo.git.add(file)
+        print(f"Añadido al área de staging: {file}")
+    except Exception as e:
+        print(f"Error al añadir {file} al área de staging: {e}")
 
 def generate_commit_message(repo, file=None, use_ai=False):
     """
@@ -112,21 +154,6 @@ def generate_ai_description(diff_text):
         print(f"Error al generar la descripción con IA: {e}")
         return "Descripción automática no disponible."
 
-def format_commit_message(diff_text):
-    if "add" in diff_text.lower():
-        title = "feat: add new features"
-    elif "fix" in diff_text.lower():
-        title = "fix: resolve issues and bugs"
-    elif "remove" in diff_text.lower():
-        title = "chore: remove deprecated code"
-    elif "update" in diff_text.lower() or "refactor" in diff_text.lower():
-        title = "refactor: code improvements and updates"
-    else:
-        title = "chore: general updates"
-
-    body = diff_text[:250].replace('\n', ' ')
-    return f"{title}\n\n{body}"
-
 def confirm_commit(commit_message):
     print("\nMensaje de commit propuesto:\n")
     print(commit_message)
@@ -144,16 +171,8 @@ def commit_per_file(repo, use_ai=False):
     changed_files = repo.git.diff('HEAD', name_only=True).splitlines()
     deleted_files = get_deleted_files(repo)
 
-    # Procesar archivos modificados
     for file in changed_files:
-        try:
-            # Añadir el archivo al área de staging
-            repo.git.add(file)
-            print(f"Añadido al área de staging: {file}")
-        except Exception as e:
-            print(f"Error al añadir {file} al área de staging: {e}")
-            continue
-
+        add_file_to_staging(repo, file)
         commit_message = generate_commit_message(repo, file, use_ai)
 
         if confirm_commit(commit_message):
@@ -163,16 +182,8 @@ def commit_per_file(repo, use_ai=False):
             except Exception as e:
                 print(f"Error al hacer el commit para {file}: {e}")
 
-    # Procesar archivos eliminados
     for file in deleted_files:
-        try:
-            # Eliminar el archivo del área de staging
-            repo.git.rm(file)
-            print(f"Eliminado del área de staging: {file}")
-        except Exception as e:
-            print(f"Error al eliminar {file} del área de staging: {e}")
-            continue
-
+        add_file_to_staging(repo, file)
         commit_message = generate_commit_message(repo, file, use_ai)
 
         if confirm_commit(commit_message):
@@ -183,11 +194,15 @@ def commit_per_file(repo, use_ai=False):
                 print(f"Error al hacer el commit para {file}: {e}")
 
 def commit_all_changes(repo, use_ai=False):
+    """
+    Realiza commit para todos los cambios del repositorio.
+    """
+    add_all_changes(repo)
+
     if not has_changes(repo):
         print("No hay cambios para commitear.")
         return
 
-    repo.git.add(A=True)
     commit_message = generate_commit_message(repo, use_ai=use_ai)
 
     if confirm_commit(commit_message):
