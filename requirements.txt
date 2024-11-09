@@ -1,3 +1,4 @@
-gitpython 
-openai 
-python-dotenv  
+gitpython
+openai
+python-dotenv
+make
