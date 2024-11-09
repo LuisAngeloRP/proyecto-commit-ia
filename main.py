@@ -22,9 +22,10 @@ def get_git_repository():
 
 def has_changes(repo):
     """
-    Verifica si hay cambios en el repositorio, incluyendo archivos eliminados.
+    Verifica si hay cambios en el repositorio, incluyendo archivos eliminados y nuevos.
     """
-    return bool(repo.git.diff('HEAD')) or bool(repo.git.ls_files(deleted=True))
+    untracked_files = repo.untracked_files
+    return bool(repo.git.diff('HEAD')) or bool(repo.git.ls_files(deleted=True)) or bool(untracked_files)
 
 def get_deleted_files(repo):
     """
@@ -135,25 +136,20 @@ def confirm_commit(commit_message):
 
 def commit_per_file(repo, use_ai=False):
     """
-    Crea un commit separado para cada archivo modificado o eliminado.
+    Crea un commit separado para cada archivo modificado, eliminado o nuevo.
     """
     if not has_changes(repo):
         print("No hay cambios para commitear.")
         return
+
+    # Añadir archivos nuevos al área de staging
+    repo.git.add(A=True)
 
     changed_files = repo.git.diff('HEAD', name_only=True).splitlines()
     deleted_files = get_deleted_files(repo)
 
     # Procesar archivos modificados
     for file in changed_files:
-        try:
-            # Añadir el archivo al área de staging
-            repo.git.add(file)
-            print(f"Añadido al área de staging: {file}")
-        except Exception as e:
-            print(f"Error al añadir {file} al área de staging: {e}")
-            continue
-
         commit_message = generate_commit_message(repo, file, use_ai)
 
         if confirm_commit(commit_message):
@@ -166,7 +162,6 @@ def commit_per_file(repo, use_ai=False):
     # Procesar archivos eliminados
     for file in deleted_files:
         try:
-            # Eliminar el archivo del área de staging
             repo.git.rm(file)
             print(f"Eliminado del área de staging: {file}")
         except Exception as e:
@@ -187,6 +182,7 @@ def commit_all_changes(repo, use_ai=False):
         print("No hay cambios para commitear.")
         return
 
+    # Asegurarse de agregar archivos nuevos al área de staging
     repo.git.add(A=True)
     commit_message = generate_commit_message(repo, use_ai=use_ai)
 
