@@ -21,22 +21,13 @@ def get_git_repository():
         return None
 
 def has_changes(repo):
-    """
-    Verifica si hay cambios en el repositorio, incluyendo archivos eliminados y nuevos.
-    """
     untracked_files = repo.untracked_files
     return bool(repo.git.diff('HEAD')) or bool(repo.git.ls_files(deleted=True)) or bool(untracked_files)
 
 def get_deleted_files(repo):
-    """
-    Obtiene la lista de archivos eliminados.
-    """
     return repo.git.ls_files(deleted=True).splitlines()
 
 def generate_commit_message(repo, file=None, use_ai=False):
-    """
-    Genera un mensaje de commit, manejando archivos eliminados.
-    """
     deleted_files = get_deleted_files(repo)
 
     if file:
@@ -50,7 +41,6 @@ def generate_commit_message(repo, file=None, use_ai=False):
                 message = f"Archivo eliminado: {file}\n"
     else:
         changed_files = repo.git.diff('HEAD', name_only=True).splitlines()
-
         if not changed_files and not deleted_files:
             return "No hay cambios para commitear."
 
@@ -135,31 +125,31 @@ def confirm_commit(commit_message):
     return confirm == 's'
 
 def commit_per_file(repo, use_ai=False):
-    """
-    Crea un commit separado para cada archivo modificado, eliminado o nuevo.
-    """
     if not has_changes(repo):
         print("No hay cambios para commitear.")
         return
 
-    # Añadir archivos nuevos al área de staging
-    repo.git.add(A=True)
-
     changed_files = repo.git.diff('HEAD', name_only=True).splitlines()
+    untracked_files = repo.untracked_files
     deleted_files = get_deleted_files(repo)
 
-    # Procesar archivos modificados
-    for file in changed_files:
+    for file in changed_files + untracked_files:
+        try:
+            repo.git.add(file)
+            print(f"Añadido al área de staging: {file}")
+        except Exception as e:
+            print(f"Error al añadir {file} al área de staging: {e}")
+            continue
+
         commit_message = generate_commit_message(repo, file, use_ai)
 
         if confirm_commit(commit_message):
             try:
                 repo.git.commit(m=commit_message)
-                print(f"Commit realizado para el archivo modificado: {file}")
+                print(f"Commit realizado para el archivo: {file}")
             except Exception as e:
                 print(f"Error al hacer el commit para {file}: {e}")
 
-    # Procesar archivos eliminados
     for file in deleted_files:
         try:
             repo.git.rm(file)
@@ -177,22 +167,6 @@ def commit_per_file(repo, use_ai=False):
             except Exception as e:
                 print(f"Error al hacer el commit para {file}: {e}")
 
-def commit_all_changes(repo, use_ai=False):
-    if not has_changes(repo):
-        print("No hay cambios para commitear.")
-        return
-
-    # Asegurarse de agregar archivos nuevos al área de staging
-    repo.git.add(A=True)
-    commit_message = generate_commit_message(repo, use_ai=use_ai)
-
-    if confirm_commit(commit_message):
-        try:
-            repo.git.commit(m=commit_message)
-            print("Commit realizado con éxito para todos los cambios.")
-        except Exception as e:
-            print(f"Error al hacer el commit: {e}")
-
 def main():
     parser = argparse.ArgumentParser(description="Script para hacer commits automáticos con mensajes generados.")
     parser.add_argument("--mode", choices=["per-file", "all"], default="all", help="Modo de commit.")
@@ -206,7 +180,14 @@ def main():
     if args.mode == "per-file":
         commit_per_file(repo, use_ai=args.use_ai)
     elif args.mode == "all":
-        commit_all_changes(repo, use_ai=args.use_ai)
+        try:
+            repo.git.add(A=True)
+            commit_message = generate_commit_message(repo, use_ai=args.use_ai)
+            if confirm_commit(commit_message):
+                repo.git.commit(m=commit_message)
+                print("Commit realizado con éxito para todos los cambios.")
+        except Exception as e:
+            print(f"Error al hacer el commit: {e}")
 
 if __name__ == "__main__":
     main()
