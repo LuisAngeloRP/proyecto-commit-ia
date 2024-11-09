@@ -134,25 +134,53 @@ def confirm_commit(commit_message):
     return confirm == 's'
 
 def commit_per_file(repo, use_ai=False):
+    """
+    Crea un commit separado para cada archivo modificado o eliminado.
+    """
     if not has_changes(repo):
         print("No hay cambios para commitear.")
         return
 
-    repo.git.add(update=True)
     changed_files = repo.git.diff('HEAD', name_only=True).splitlines()
     deleted_files = get_deleted_files(repo)
 
-    for file in changed_files + deleted_files:
+    # Procesar archivos modificados
+    for file in changed_files:
+        try:
+            # Añadir el archivo al área de staging
+            repo.git.add(file)
+            print(f"Añadido al área de staging: {file}")
+        except Exception as e:
+            print(f"Error al añadir {file} al área de staging: {e}")
+            continue
+
         commit_message = generate_commit_message(repo, file, use_ai)
 
         if confirm_commit(commit_message):
             try:
                 repo.git.commit(m=commit_message)
-                print(f"Commit realizado para el archivo: {file}")
+                print(f"Commit realizado para el archivo modificado: {file}")
             except Exception as e:
                 print(f"Error al hacer el commit para {file}: {e}")
-        else:
-            print(f"Commit cancelado para el archivo: {file}")
+
+    # Procesar archivos eliminados
+    for file in deleted_files:
+        try:
+            # Eliminar el archivo del área de staging
+            repo.git.rm(file)
+            print(f"Eliminado del área de staging: {file}")
+        except Exception as e:
+            print(f"Error al eliminar {file} del área de staging: {e}")
+            continue
+
+        commit_message = generate_commit_message(repo, file, use_ai)
+
+        if confirm_commit(commit_message):
+            try:
+                repo.git.commit(m=commit_message)
+                print(f"Commit realizado para el archivo eliminado: {file}")
+            except Exception as e:
+                print(f"Error al hacer el commit para {file}: {e}")
 
 def commit_all_changes(repo, use_ai=False):
     if not has_changes(repo):
@@ -160,7 +188,6 @@ def commit_all_changes(repo, use_ai=False):
         return
 
     repo.git.add(A=True)
-    repo.git.add(update=True)
     commit_message = generate_commit_message(repo, use_ai=use_ai)
 
     if confirm_commit(commit_message):
@@ -169,8 +196,6 @@ def commit_all_changes(repo, use_ai=False):
             print("Commit realizado con éxito para todos los cambios.")
         except Exception as e:
             print(f"Error al hacer el commit: {e}")
-    else:
-        print("Commit cancelado.")
 
 def main():
     parser = argparse.ArgumentParser(description="Script para hacer commits automáticos con mensajes generados.")
