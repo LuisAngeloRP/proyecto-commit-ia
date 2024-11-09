@@ -10,6 +10,9 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def get_git_repository():
+    """
+    Obtiene el repositorio de Git del directorio actual.
+    """
     try:
         repo = git.Repo(os.getcwd())
         if repo.bare:
@@ -21,9 +24,15 @@ def get_git_repository():
         return None
 
 def has_changes(repo):
+    """
+    Verifica si hay cambios en el repositorio.
+    """
     return bool(repo.git.diff('HEAD'))
 
 def generate_commit_message(repo, file=None, use_ai=False):
+    """
+    Genera un mensaje de commit siguiendo buenas prácticas.
+    """
     if file:
         file_diff = repo.git.diff('HEAD', file)
         message = f"Archivo: {file}\nCambios:\n{file_diff}\n"
@@ -43,6 +52,9 @@ def generate_commit_message(repo, file=None, use_ai=False):
     return format_commit_message(message)
 
 def generate_ai_description(diff_text):
+    """
+    Genera una descripción detallada usando la API de OpenAI con una plantilla fija.
+    """
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -52,7 +64,7 @@ def generate_ai_description(diff_text):
                     "content": (
                         "Eres un asistente experto en programación. Ayuda a generar mensajes de commit siguiendo buenas prácticas. "
                         "Devuelve siempre el resultado en el siguiente formato:\n"
-                        "[titulo]: <Tipo de commit como 'feat', 'fix', 'refactor', etc.>: <Título del commit>\n"
+                        "[titulo]: <Tipo de commit, como 'feat', 'fix', 'refactor', 'add', etc>: <Título del commit>\n"
                         "[descripcion]: <Descripción detallada del commit>"
                     )
                 },
@@ -65,7 +77,8 @@ def generate_ai_description(diff_text):
         )
 
         ai_message = response.choices[0].message.content.strip()
-        title, description = "", ""
+        title = ""
+        description = ""
 
         for line in ai_message.splitlines():
             if line.lower().startswith("[titulo]:"):
@@ -85,6 +98,9 @@ def generate_ai_description(diff_text):
         return "Descripción automática no disponible."
 
 def format_commit_message(diff_text):
+    """
+    Formatea el mensaje de commit siguiendo las buenas prácticas.
+    """
     if "add" in diff_text.lower():
         title = "feat: add new features"
     elif "fix" in diff_text.lower():
@@ -100,33 +116,28 @@ def format_commit_message(diff_text):
     return f"{title}\n\n{body}"
 
 def confirm_commit(commit_message):
+    """
+    Muestra el mensaje de commit y pide confirmación al usuario.
+    """
     print("\nMensaje de commit propuesto:\n")
     print(commit_message)
     confirm = input("\n¿Deseas proceder con este commit? (s/n): ").strip().lower()
     return confirm == 's'
 
 def commit_per_file(repo, use_ai=False):
+    """
+    Crea un commit separado para cada archivo modificado.
+    """
     if not has_changes(repo):
         print("No hay cambios para commitear.")
         return
 
+    # Actualizar el índice con archivos modificados y eliminados
+    repo.git.add(update=True)
+
     changed_files = repo.git.diff('HEAD', name_only=True).splitlines()
 
     for file in changed_files:
-        if not os.path.exists(file):
-            print(f"Archivo {file} eliminado. Ejecutando 'git rm'.")
-            try:
-                repo.git.rm(file)
-            except git.exc.GitCommandError as e:
-                print(f"Error al eliminar {file}: {e}")
-                continue
-        else:
-            try:
-                repo.git.add(file)
-            except git.exc.GitCommandError as e:
-                print(f"Error al añadir {file}: {e}")
-                continue
-
         commit_message = generate_commit_message(repo, file, use_ai)
 
         if confirm_commit(commit_message):
@@ -139,20 +150,15 @@ def commit_per_file(repo, use_ai=False):
             print(f"Commit cancelado para el archivo: {file}")
 
 def commit_all_changes(repo, use_ai=False):
+    """
+    Crea un solo commit para todos los cambios.
+    """
     if not has_changes(repo):
         print("No hay cambios para commitear.")
         return
 
-    try:
-        repo.git.add(A=True)
-        deleted_files = repo.git.diff('HEAD', name_only=True, diff_filter='D').splitlines()
-        for file in deleted_files:
-            print(f"Archivo {file} eliminado. Ejecutando 'git rm'.")
-            repo.git.rm(file)
-    except git.exc.GitCommandError as e:
-        print(f"Error al preparar cambios: {e}")
-        return
-
+    # Agregar todos los cambios incluyendo archivos eliminados
+    repo.git.add(A=True)
     commit_message = generate_commit_message(repo, use_ai=use_ai)
 
     if confirm_commit(commit_message):
@@ -165,6 +171,9 @@ def commit_all_changes(repo, use_ai=False):
         print("Commit cancelado.")
 
 def main():
+    """
+    Punto de entrada del script.
+    """
     parser = argparse.ArgumentParser(description="Script para hacer commits automáticos con mensajes generados.")
     parser.add_argument(
         "--mode", choices=["per-file", "all"], default="all",
