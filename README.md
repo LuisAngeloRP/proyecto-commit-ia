@@ -5,7 +5,7 @@ Este proyecto es un script automatizado para realizar commits en Git con mensaje
 
 ## Requisitos
 
-- Python 3.x
+- Python 3.10.x
 - Repositorio Git válido
 - [OpenAI API Key](https://platform.openai.com/signup) (opcional para generar mensajes con IA)
 - Archivo `.env` con tu clave de API de OpenAI:
