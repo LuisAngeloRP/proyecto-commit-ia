@@ -137,6 +137,9 @@ def commit_per_file(repo, use_ai=False):
     """
     Crea un commit separado para cada archivo modificado o eliminado.
     """
+    if not has_changes(repo):
+        print("No hay cambios para commitear.")
+        return
 
     changed_files = repo.git.diff('HEAD', name_only=True).splitlines()
     deleted_files = get_deleted_files(repo)
