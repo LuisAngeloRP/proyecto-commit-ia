@@ -10,4 +10,4 @@ install:
 .PHONY: run
 
 run:
-	python main.py --mode $(MODE) $(if $(USE_AI), --use-ai)
+	python main.py --mode $(MODE) $(if $(USE_AI),--use-ai)
